@@ -1,44 +1,23 @@
-#define analogsensor A0
-
+#include <SoftwareSerial.h>
 #include <Arduino.h>
 #include <random>
 #include <ESP8266WiFi.h>
-#include <Firebase_ESP_Client.h>
+#include <WiFiUdp.h>
+#include <NTPClient.h>               
+#include <TimeLib.h> 
+#include <TinyGPS++.h>
 
-#include "addons/TokenHelper.h"
-#include "addons/RTDBHelper.h"
+SoftwareSerial espSerial(3, 1); // RX TX
 
+#define analogsensor A0
 #define WIFI_SSID ""
 #define WIFI_PASSWORD ""
 
-#define API_KEY ""
-#define DATABASE_URL "" 
-
-FirebaseData fbdo;
-FirebaseAuth auth;
-FirebaseConfig config;
-
-unsigned long sendDataPrevMillis = 0;
-int count = 0;
-bool signupOK = false;
-
-#include <WiFiUdp.h>
-#include <NTPClient.h>               
-#include <TimeLib.h>    
-
 const long utcOffsetInSeconds = (8 * 60 * 60);  // set offset (GMT * 60 * 60)
 WiFiUDP ntpUDP;
-
 NTPClient timeClient(ntpUDP, "id.pool.ntp.org", utcOffsetInSeconds);
-char Time[ ] = "Jam: 00:00:00";
-char Date[ ] = "Tgl: 00/00/2000";
-char dateTime [100];
-byte last_second, second_, minute_, hour_, day_, month_;
-int year_;
 
 // GPS
-#include <TinyGPS++.h>
-#include <SoftwareSerial.h>
 TinyGPSPlus gps;
 SoftwareSerial SerialGPS(4, 5); // RX, TX
 float latF, lonF;
@@ -50,9 +29,16 @@ String lat, lon;
 void setup() { 
   pinMode(analogsensor, INPUT);
   pinMode(buzzerpin, OUTPUT);
-  Serial.begin(115200);
+  Serial.begin(9600);
+  espSerial.begin(9600);
+  SerialGPS.begin(115200);
 
   randomSeed(analogRead(0));
+
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(1000);
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to Wi-Fi");
   while (WiFi.status() != WL_CONNECTED){
@@ -64,31 +50,30 @@ void setup() {
   Serial.println(WiFi.localIP());
   Serial.println();
 
-  config.api_key = API_KEY;
-  config.database_url = DATABASE_URL;
-  config.token_status_callback = tokenStatusCallback;
-
-  Firebase.begin(&config, &auth);
-  Firebase.reconnectWiFi(true);
-
   timeClient.begin();
-
-  SerialGPS.begin(115200);
-  if (Firebase.signUp(&config, &auth, "", "")){
-    Serial.println("ok");
-    signupOK = true;
-  }
-  else{
-    Serial.printf("%s\n", config.signer.signupError.message.c_str());
-  }
-  fbdo.setBSSLBufferSize(4096 /* Rx buffer size in bytes from 512 - 16384 */, 1024 /* Tx buffer size in bytes from 512 - 16384 */);
 }
-
 
 unsigned long getEpoch(){
   timeClient.update();
   return timeClient.getEpochTime();
 }
+
+void sendData(String desc, unsigned long date) {
+  // GPS
+  if (gps.encode(SerialGPS.read())){
+    if (gps.location.isValid()){
+      latF = gps.location.lat();
+      lat = String(latF , 6);
+      lonF = gps.location.lng();
+      lon = String(lonF , 6);
+    }
+  }
+  
+  // Here, "none" is needed because of the undefined data when sending these string to ESP32
+  String send = desc+"|"+String(date)+"|"+lat+"|none|"+lon;
+  espSerial.println(send);
+}
+
 void loop() {
   Serial.print("Analog value: ");
   Serial.println(analogRead(analogsensor));
@@ -101,15 +86,11 @@ void loop() {
     digitalWrite(buzzerpin, LOW);
   }else if(analogRead(analogsensor) > 100 ){
     Serial.println("Api Sedang.");
-
-    sendFirebase("Sedang", getEpoch());
-    sendMessage();
+    sendData("Sedang", getEpoch());
   }else {
     timeClient.update();
     Serial.println("Api Tinggi.");
-
-    sendFirebase("Tinggi", getEpoch());
-    sendMessage();
+    sendData("Tinggi", getEpoch());
   }
   delay(1000);
 }
