@@ -10,6 +10,7 @@
 SoftwareSerial espSerial(3, 1); // RX TX
 
 #define analogsensor A0
+#define smokesensor D7
 #define WIFI_SSID ""
 #define WIFI_PASSWORD ""
 
@@ -28,6 +29,7 @@ String lat, lon;
   
 void setup() { 
   pinMode(analogsensor, INPUT);
+  pinMode(smokesensor, INPUT);
   pinMode(buzzerpin, OUTPUT);
   Serial.begin(9600);
   espSerial.begin(9600);
@@ -75,22 +77,22 @@ void sendData(String desc, unsigned long date) {
 }
 
 void loop() {
-  Serial.print("Analog value: ");
-  Serial.println(analogRead(analogsensor));
-  if(analogRead(analogsensor) > 800){
-    Serial.println("Tidak ada api");
-  }else if(analogRead(analogsensor) > 500){
-    Serial.println("Kecil.");
-    digitalWrite(buzzerpin, HIGH);
-    delay(1000);
-    digitalWrite(buzzerpin, LOW);
-  }else if(analogRead(analogsensor) > 100 ){
-    Serial.println("Api Sedang.");
-    sendData("Sedang", getEpoch());
-  }else {
-    timeClient.update();
-    Serial.println("Api Tinggi.");
-    sendData("Tinggi", getEpoch());
+  if(digitalRead(smokesensor)){
+    if(analogRead(analogsensor) > 800){
+      Serial.println("Tidak ada api");
+    }else if(analogRead(analogsensor) > 500){
+      Serial.println("Kecil.");
+      digitalWrite(buzzerpin, HIGH);
+      delay(1000);
+      digitalWrite(buzzerpin, LOW);
+    }else if(analogRead(analogsensor) > 100 ){
+      Serial.println("Api Sedang.");
+      sendData("Sedang", getEpoch());
+    }else {
+      timeClient.update();
+      Serial.println("Api Tinggi.");
+      sendData("Tinggi", getEpoch());
+    }
   }
   delay(1000);
 }
