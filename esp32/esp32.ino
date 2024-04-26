@@ -1,40 +1,37 @@
 #include "Arduino.h"
 #include "WiFi.h"
 #include "esp_camera.h"
+
+// Disable brownout problems
+#include "soc/soc.h"           
+#include "soc/rtc_cntl_reg.h"
+
 #include "driver/rtc_io.h"
 #include <LittleFS.h>
 #include <FS.h>
-
-// Disable brownout problems
-#include "soc/soc.h"
-#include "soc/rtc_cntl_reg.h"
-
-// Firebase
 #include <Firebase_ESP_Client.h>
+
 #include "addons/TokenHelper.h"
 #include "addons/RTDBHelper.h"
+
+#define _SSID ""
+#define _PASSWORD ""
+
+const int ESP32_RX_PIN = 3; 
+const int ESP32_TX_PIN = 0; 
+
+HardwareSerial espSerial(2);
+
 #define API_KEY ""
 #define DATABASE_URL ""
-#define STORAGE_BUCKET_ID ""
-#define FILE_PHOTO_PATH ""
-FirebaseData fbdo;
-FirebaseAuth auth;
-FirebaseConfig config;
-String uid;
-unsigned long sendDataPrevMillis = 0;
-int count = 0;
+
 // Firebase user
 #define USER_EMAIL ""
 #define USER_PASSWORD ""
 
-#define WIFI_SSID ""
-#define WIFI_PASSWORD ""
+#define STORAGE_BUCKET_ID ""
+#define FILE_PHOTO_PATH ""
 
-const int ESP32_RX_PIN = 3; 
-const int ESP32_TX_PIN = 0; 
-HardwareSerial espSerial(2);
-
-// Camera pin
 #define PWDN_GPIO_NUM     32
 #define RESET_GPIO_NUM    -1
 #define XCLK_GPIO_NUM      0
@@ -53,29 +50,37 @@ HardwareSerial espSerial(2);
 #define PCLK_GPIO_NUM     22
 
 bool takeNewPhoto = true;
-bool taskCompleted = false;
-const char delimiter = '|';
+
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
+String uid;
+unsigned long sendDataPrevMillis = 0;
+int count = 0;
+
+const char delimiter = '|'; // pemisah dalam string
 String elements[3];
-String indexArr[5] = {"desc", "time", "lat", "filler","lon"};
+
+bool taskCompleted = false;
 
 void setup() {
   Serial.begin(9600);
   espSerial.begin(9600, SERIAL_8N1, ESP32_RX_PIN, ESP32_TX_PIN);
 
-  // Wifi connect
+  // Connect to wifi
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   delay(1000);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Connecting to Wi-Fi");
-  while (WiFi.status() != WL_CONNECTED){
-    Serial.print(".");
-    delay(300);
+  Serial.println();
+  Serial.print("Connecting to: ");
+  Serial.println(_SSID);
+  WiFi.begin(_SSID, _PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print("-");
   }
-  Serial.println();
-  Serial.print("Connected with IP: ");
-  Serial.println(WiFi.localIP());
-  Serial.println();
+  Serial.println("");
+  Serial.println("WiFi Connected");
 
   // Firebase
   // Assign the api key (required)
@@ -104,16 +109,17 @@ void setup() {
   Serial.print("User UID: ");
   Serial.println(uid);
 
-  // Init littleFS
+  // Init LittleFS
   if (!LittleFS.begin(true)) {
     Serial.println("An Error has occurred while mounting LittleFS");
     ESP.restart();
-  } else {
+  }
+  else {
     delay(500);
     Serial.println("LittleFS mounted successfully");
   }
 
-  // init camera
+  // Init Camera
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -153,27 +159,27 @@ void setup() {
   } 
 }
 
-void fcsUploadCallback(FCS_UploadStatusInfo info){
-    if (info.status == firebase_fcs_upload_status_init){
-      Serial.printf("Uploading file %s (%d) to %s\n", info.localFileName.c_str(), info.fileSize, info.remoteFileName.c_str());
-    } else if (info.status == firebase_fcs_upload_status_upload){
-      Serial.printf("Uploaded %d%s, Elapsed time %d ms\n", (int)info.progress, "%", info.elapsedTime);
-    } else if (info.status == firebase_fcs_upload_status_complete){
-      Serial.println("Upload completed\n");
-      FileMetaInfo meta = fbdo.metaData();
-      Serial.printf("Name: %s\n", meta.name.c_str());
-      Serial.printf("Bucket: %s\n", meta.bucket.c_str());
-      Serial.printf("contentType: %s\n", meta.contentType.c_str());
-      Serial.printf("Size: %d\n", meta.size);
-      Serial.printf("Generation: %lu\n", meta.generation);
-      Serial.printf("Metageneration: %lu\n", meta.metageneration);
-      Serial.printf("ETag: %s\n", meta.etag.c_str());
-      Serial.printf("CRC32: %s\n", meta.crc32.c_str());
-      Serial.printf("Tokens: %s\n", meta.downloadTokens.c_str());
-      Serial.printf("Download URL: %s\n\n", fbdo.downloadURL().c_str());
-    } else if (info.status == firebase_fcs_upload_status_error){
-      Serial.printf("Upload failed, %s\n", info.errorMsg.c_str());
-    }
+void fcsUploadCallback(FCS_UploadStatusInfo info) {
+  if (info.status == firebase_fcs_upload_status_init){
+    Serial.printf("Uploading file %s (%d) to %s\n", info.localFileName.c_str(), info.fileSize, info.remoteFileName.c_str());
+  } else if (info.status == firebase_fcs_upload_status_upload) {
+    Serial.printf("Uploaded %d%s, Elapsed time %d ms\n", (int)info.progress, "%", info.elapsedTime);
+  } else if (info.status == firebase_fcs_upload_status_complete) {
+    Serial.println("Upload completed\n");
+    FileMetaInfo meta = fbdo.metaData();
+    Serial.printf("Name: %s\n", meta.name.c_str());
+    Serial.printf("Bucket: %s\n", meta.bucket.c_str());
+    Serial.printf("contentType: %s\n", meta.contentType.c_str());
+    Serial.printf("Size: %d\n", meta.size);
+    Serial.printf("Generation: %lu\n", meta.generation);
+    Serial.printf("Metageneration: %lu\n", meta.metageneration);
+    Serial.printf("ETag: %s\n", meta.etag.c_str());
+    Serial.printf("CRC32: %s\n", meta.crc32.c_str());
+    Serial.printf("Tokens: %s\n", meta.downloadTokens.c_str());
+    Serial.printf("Download URL: %s\n\n", fbdo.downloadURL().c_str());
+  } else if (info.status == firebase_fcs_upload_status_error) {
+    Serial.printf("Upload failed, %s\n", info.errorMsg.c_str());
+  }
 }
 
 void capturePhotoSaveLittleFS( void ) {
@@ -199,7 +205,8 @@ void capturePhotoSaveLittleFS( void ) {
   // Insert the data in the photo file
   if (!file) {
     Serial.println("Failed to open file in writing mode");
-  } else {
+  }
+  else {
     file.write(fb->buf, fb->len); // payload (image), payload length
     Serial.print("The picture has been saved in ");
     Serial.print(FILE_PHOTO_PATH);
@@ -213,11 +220,11 @@ void capturePhotoSaveLittleFS( void ) {
 }
 
 void loop() {
+  String indexArr[5] = {"desc", "time", "lat", "filler","lon"};
+  String url;
+  taskCompleted = false;
+  takeNewPhoto = true;
   if (espSerial.available()) {
-    // reset the variable
-    String url = "";
-    taskCompleted = false;
-    takeNewPhoto = true;
     delay(1000);
     // random string
     String randomString = "";
@@ -232,9 +239,9 @@ void loop() {
       randomString += randomChar;
     }
 
-    // Decode received data
+    // Decode data
     String data = espSerial.readStringUntil('\n');
-    Serial.print("Received: ");
+    Serial.print("Data yang diterima: ");
     Serial.println(data);
     
     int index = 0;
@@ -267,13 +274,13 @@ void loop() {
       if (Firebase.Storage.upload(&fbdo, STORAGE_BUCKET_ID, FILE_PHOTO_PATH, mem_storage_type_flash, bucketPath, "image/jpeg", fcsUploadCallback)){
         Serial.printf("\nDownload URL: %s\n", fbdo.downloadURL().c_str());
         url = fbdo.downloadURL().c_str();
-      } else {
+      }
+      else{
         Serial.println(fbdo.errorReason());
       }
     }
     if (Firebase.ready() && (millis() - sendDataPrevMillis > 15000 || sendDataPrevMillis == 0)){
       sendDataPrevMillis = millis();
-
       // assign data to firebasejson
       FirebaseJson json;
       json.set("image_url", url);
@@ -283,12 +290,12 @@ void loop() {
           json.set(indexArr[i], String(elements[i]));
         }
       }
-
       if (Firebase.RTDB.setJSON(&fbdo, String("datas/"+randomString), &json)){
         Serial.println("Sent.");
         Serial.println("PATH: " + fbdo.dataPath());
         Serial.println("TYPE: " + fbdo.dataType());
-      } else {
+      }
+      else {
         Serial.println("FAILED");
         Serial.println("Data type: " + fbdo.dataType());
         Serial.println("REASON: " + fbdo.errorReason());
