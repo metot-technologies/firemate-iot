@@ -26,7 +26,20 @@ String lat, lon;
 
 //buzzer
 #define buzzerpin D6
-  
+
+// Firebase
+#include <Firebase_ESP_Client.h>
+#include <addons/TokenHelper.h>
+#define FIREBASE_PROJECT_ID ""
+#define FIREBASE_CLIENT_EMAIL ""
+const char PRIVATE_KEY[] PROGMEM = "";
+#define DEVICE_REGISTRATION_ID_TOKEN ""
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
+unsigned long lastTime = 0;
+int count = 0;
+
 void setup() { 
   pinMode(analogsensor, INPUT);
   pinMode(smokesensor, INPUT);
@@ -52,6 +65,15 @@ void setup() {
   Serial.println(WiFi.localIP());
   Serial.println();
 
+  // Init the firebase config
+  config.service_account.data.client_email = FIREBASE_CLIENT_EMAIL;
+  config.service_account.data.project_id = FIREBASE_PROJECT_ID;
+  config.service_account.data.private_key = PRIVATE_KEY;
+  config.token_status_callback = tokenStatusCallback;
+  Firebase.reconnectNetwork(true);
+  fbdo.setBSSLBufferSize(4096, 1024);
+  Firebase.begin(&config, &auth);
+
   timeClient.begin();
 }
 
@@ -69,6 +91,26 @@ void sendData(String desc, unsigned long date) {
       lonF = gps.location.lng();
       lon = String(lonF , 6);
     }
+  }
+
+  //FCM
+  if (Firebase.ready() && (millis() - lastTime > 60 * 1000 || lastTime == 0)){
+    lastTime = millis();
+
+    Serial.print("Send Firebase Cloud Messaging... ");
+
+    FCM_HTTPv1_JSON_Message msg;
+    msg.token = DEVICE_REGISTRATION_ID_TOKEN;
+    msg.notification.body = "🔔Kebakaran";
+    msg.notification.title = "Klik untuk detail";
+
+    if (Firebase.FCM.send(&fbdo, &msg)){
+      Serial.printf("ok\n%s\n\n", Firebase.FCM.payload(&fbdo).c_str());
+    } else {
+      Serial.println(fbdo.errorReason());
+    }
+    
+    count++;
   }
   
   // Here, "none" is needed because of the undefined data when sending these string to ESP32
