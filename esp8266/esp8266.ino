@@ -40,6 +40,9 @@ FirebaseConfig config;
 unsigned long lastTime = 0;
 int count = 0;
 
+// Pin to switch analog
+#define plusFlame D5
+
 void setup() { 
   pinMode(analogsensor, INPUT);
   pinMode(smokesensor, INPUT);
@@ -119,7 +122,13 @@ void sendData(String desc, unsigned long date) {
 }
 
 void loop() {
-  if(digitalRead(smokesensor == HIGH)){
+  int analogSensor = analogRead(analogsensor);
+  // Always make the flame sensor LOW first
+  digitalWrite(plusFlame, LOW);
+  // If the smoke sensor detect smoke
+  // Then the flame sensor will turned on
+  if(analogRead(analogsensor) < 100){ 
+    digitalWrite(plusFlame, HIGH);
     if(analogRead(analogsensor) > 800){
       Serial.println("Tidak ada api");
     }else if(analogRead(analogsensor) > 500){
