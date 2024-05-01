@@ -77,7 +77,7 @@ void sendData(String desc, unsigned long date) {
 }
 
 void loop() {
-  if(digitalRead(smokesensor)){
+  if(digitalRead(smokesensor == HIGH)){
     if(analogRead(analogsensor) > 800){
       Serial.println("Tidak ada api");
     }else if(analogRead(analogsensor) > 500){
