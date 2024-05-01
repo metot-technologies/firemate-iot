@@ -101,8 +101,8 @@ void sendData(String desc, unsigned long date) {
 
     FCM_HTTPv1_JSON_Message msg;
     msg.token = DEVICE_REGISTRATION_ID_TOKEN;
-    msg.notification.body = "🔔Kebakaran";
-    msg.notification.title = "Klik untuk detail";
+    msg.notification.body = "Klik untuk detail";
+    msg.notification.title = "🔔Kebakaran";
 
     if (Firebase.FCM.send(&fbdo, &msg)){
       Serial.printf("ok\n%s\n\n", Firebase.FCM.payload(&fbdo).c_str());
